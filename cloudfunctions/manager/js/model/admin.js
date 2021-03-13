@@ -1,24 +1,32 @@
 
 
-
 var  Base = require("./base")
 class Admin extends Base {
     constructor(db) {
         super(db)
         this.name = "admin"
     }
-  
 
+    // 模型
+    model(){
+        return {
+            wxOpenId  :  "" , //  微信OPenId
+            roleList : [],
+        } 
+    }
+    // 管理端展示配置 
     admin(){
         return {
                     
             name:"管理员",
             displayName:"info-0-nickName",
             displayList: [ 
+                { name: "ID", key: '_id', type: "text", },
                 { name: "头像", key: 'info', type: "arrayObjImage", objKey: "wxAvatarUrl", },
                 { name: "昵称", key: 'info', type: "arrayObjText", objKey: "nickName", },
                 { name: "权限", key: 'role', type: "arrayObjText", objKey: "name", },
             ], 
+            pageLimit:5, // 列表长度
             // 详情页配置字段
             fieldsets: [
                 {
@@ -33,9 +41,7 @@ class Admin extends Base {
                 },
                 {
                     name: "列表",
-                    fields: [
-                    
-
+                    fields: [    
                         { name: "4、图片列表", key: 'logoList', type: "arrayImage", formName: "sn" },
                         { name: "5、文字列表", key: 'markerList', type: "arrayText",  },
                     
@@ -43,8 +49,7 @@ class Admin extends Base {
                 },
                 {
                     name: "外键",
-                    fields: [
-
+                    fields: [ 
                         { name: "6、外键-父亲", key: 'fatherInfo-0-nickName', type: "foreign", foreignKey: "father", model: "admin", },
                         { name: "7、多对多-儿子们", key: 'sonListInfo', type: "arrayForeign", foreignListKey: "sonList", foreignItemKey: "nickName", model: "admin", },
                     ]
@@ -71,24 +76,12 @@ class Admin extends Base {
     }
 
 
-    model(){
-        return {
-            wxOpenId  :  "" , //  微信OPenId
-            roleList : [],
-        } 
-    }
-
-
     /**
      *  获取列表
      * 需要3个操作
      * 1、 获取普通列表， 部分需要去除wxOpenId为空的参数   _.exists(true)
      * 2、 获取搜索筛选后的列表， 指定 _.in([])
-     * 3、 获取外键，指定 _.nin([])
-     * 
-     * 
-     * 
-     * 
+     * 3、 获取外键，指定 _.nin([]) 
     列表请求参数
     {
         "model":"admin", 
@@ -128,6 +121,20 @@ class Admin extends Base {
         var addFields = this.getAddFields(foreignIdList)  
         var sort = this.getSort(baseSort,foreignIdList)
 
+        var res = await this.queryNodeList(match,addFields,sort,skip,limit)
+
+        console.log(res)
+
+        var count = await this.getCount(match)
+        
+        return { data: {
+            list:res.list,
+            pageCount: Math.ceil( count / limit)
+        } }
+    }
+
+    // list 和 node  共用的查询函数
+    async queryNodeList(match,addFields,sort,skip,limit){
         //开始查询
         var res = await  this.db.collection(this.name ).aggregate() 
         .match(match)
@@ -137,45 +144,6 @@ class Admin extends Base {
             foreignField: 'wxOpenId',
             as:"info"
         })        
-        .lookup({
-            from:"role",
-            localField: 'roleList',
-            foreignField: '_id',
-            as:"role"
-        })
-        .addFields(addFields)
-        .sort(sort)
-        .skip( skip )
-        .limit(limit)
-        .end()    
-
-        console.log(res)
-
-        var count = await this.getCount()
-        
-        return { data: {
-            list:res.list,
-            pageCount: Math.ceil( count / limit)
-        } }
-    }
-
-
-
-
-
-    // 获取详情
-    async getNode(event){
-        var _id = event._id
-        var res = await this.db.collection('admin').aggregate() 
-        .match({
-            _id:_id             
-        })
-        .lookup({
-            from:"wxMemberInfo",
-            localField: 'wxOpenId',
-            foreignField: 'wxOpenId',
-            as:"info"
-        })
         .lookup({
             from:"role",
             localField: 'roleList',
@@ -195,23 +163,71 @@ class Admin extends Base {
             foreignField: '_id',
             as:"sonListInfo"
         })
-        // .project({
+        .addFields(addFields)
+        .sort(sort)
+        .skip( skip )
+        .limit(limit)
+        .end()    
+        return res
+    }
+ 
 
-        // })
-        .limit(20)
-        .end() 
+    /**
+     * @method  获取详情
+      {
+        "model":"admin", 
+        "action": "getNode",
+        "_id":"79550af260435f87089d72cd7e4db0a2"
+       
+        }
 
+     */
+    async getNode(event){
+        var _id = event._id
+
+        var match = { _id:_id }
+        var addFields =  this.getAddFields([])
+        var sort = this.getSort({},[])
+        var skip = 0
+        var limit = 1
+        var res = await this.queryNodeList(match,addFields,sort,skip,limit)
+        
         console.log(res)
         
         return { data: res.list[0] }
     }
 
-    
-    // 更新
-    async updateNode(){}
 
-    // 新增
-    async addNode(){}
+    /**
+    @method 新增节点
+        {
+            "model":"admin", 
+            "action": "addNode",
+        }
+    */
+    async addNode(event){
+        var model = this.getModel()
+
+        var res =  await this.db.collection(this.name ).add({
+            data:model
+        })
+
+        console.log(res)
+        return  { data: res._id , msg:'添加节点成功' }
+    }
+    
+    /**
+     * @method 更新列表
+     * 
+     * 更新node的fieldsets各项数值 
+     */
+    async updateNode(event){
+
+        //TODO 按照条件,更新内容
+        return { data:event , msg:'更新列表成功' }
+    }
+ 
+
 }
      
 module.exports = Admin
