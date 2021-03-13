@@ -2,7 +2,7 @@
 const cloud = require('wx-server-sdk')
 
 cloud.init()
-const Route = require("js/route.js")
+const Route = require("./js/route")
 // var  Route = require('./js/route')
 
 // 云函数入口函数
@@ -31,7 +31,7 @@ exports.main = async (event, context) => {
 
     route = new Route(db)
 
-    var result = route.test()
+    // var result = route.test()
 
     
     if(event.isGetAdmin == 1   )
@@ -39,6 +39,7 @@ exports.main = async (event, context) => {
 
 
     // route.init() //route 初始化
+
     var result = route.start(event)
 
     return result

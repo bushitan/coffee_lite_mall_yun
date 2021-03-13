@@ -1,13 +1,13 @@
 
 
 
-var  Base = require("./base.js")
+var  Base = require("./base")
 class Admin extends Base {
     constructor(db) {
         super(db)
+        this.name = "admin"
     }
   
-    name = "admin"
 
     admin(){
         return {
@@ -60,12 +60,17 @@ class Admin extends Base {
             search:[
                 {type:"text" , name:"ID" , key:"_id" }, // 文本查询
                 {type:"number"  , name:"数字-排序" , key:"sn" }, // 数字查询
-                {type:"radio" , name:"是否显示", key:"isShow" , group:[ { name:"全部",value:"" , } ,  { name:"显示",value:true , } ,  { name:"隐藏",value:false , } ,  ], }, // 数字查询
-
+                {type:"radio" , name:"是否显示", key:"isShow" , 
+                    group:[ { name:"全部",value:"" , } ,  { name:"显示",value:true , } ,  { name:"隐藏",value:false , } ,  ], 
+                }, // 多选查询
+                {type: "foreign", name: "外键-父亲", model: "admin", }, //外键查询
+                   
             ],
 
         }
     }
+
+
     model(){
         return {
             wxOpenId  :  "" , //  微信OPenId
@@ -74,40 +79,88 @@ class Admin extends Base {
     }
 
 
-    // 获取列表
-    async getList(event){
-        const _ = this.db.command
+    /**
+     *  获取列表
+     * 需要3个操作
+     * 1、 获取普通列表， 部分需要去除wxOpenId为空的参数   _.exists(true)
+     * 2、 获取搜索筛选后的列表， 指定 _.in([])
+     * 3、 获取外键，指定 _.nin([])
+     * 
+     * 
+     * 
+     * 
+    列表请求参数
+    {
+        "model":"admin", 
+        "action": "getList",
+        "pageIndex":0,
+        "pageLimit":5,
         
-        const $ = this.db.command.aggregate
-        var res = await  this.db.collection('admin').aggregate() 
-        .match({
-            // wxOpenId:"oOY_U1KTeDL3W3PtecWdVp1QXi-A"
-            wxOpenId:  _.exists(true)
-             
-        })
+        "search":{
+            "isDelete":true,
+            "father": ["28ee4e3e603f309f089c1609293881bc"]
+        },
+        "foreignIdList" : ["79550af260435f87089d72cd7e4db0a2"],
+        "sort":{ 
+            "isSelect":-1,
+            "sn" : -1 
+        }
+ 
+    }
+    */
+    async getList(event){
+
+        // 过滤基础数据
+        var index = event.pageIndex || 0
+        var skip = event.pageIndex * event.pageLimit
+        var limit = event.pageLimit
+        var foreignIdList = event.foreignIdList.length > 0 ? event.foreignIdList.reverse() : []
+        var search = event.search || {}     
+        var baseSort = event.sort || {} // 前端传上来的排序
+
+        //配置查询条件
+        var base = {
+            wxOpenId: this._.exists(true),
+        }
+        var match = this.getMatch(base,search  )
+
+        // 若是外键，增加查询参数，并放到最上层
+        var addFields = this.getAddFields(foreignIdList)  
+        var sort = this.getSort(baseSort,foreignIdList)
+
+        //开始查询
+        var res = await  this.db.collection(this.name ).aggregate() 
+        .match(match)
         .lookup({
             from:"wxMemberInfo",
             localField: 'wxOpenId',
             foreignField: 'wxOpenId',
             as:"info"
-        })
-        
+        })        
         .lookup({
             from:"role",
             localField: 'roleList',
             foreignField: '_id',
             as:"role"
         })
-        // .project({
-
-        // })
-        .limit(20)
-        .end() 
+        .addFields(addFields)
+        .sort(sort)
+        .skip( skip )
+        .limit(limit)
+        .end()    
 
         console.log(res)
+
+        var count = await this.getCount()
         
-        return { data: res.list }
+        return { data: {
+            list:res.list,
+            pageCount: Math.ceil( count / limit)
+        } }
     }
+
+
+
 
 
     // 获取详情
@@ -160,5 +213,28 @@ class Admin extends Base {
     // 新增
     async addNode(){}
 }
-    
+     
 module.exports = Admin
+
+
+
+
+
+// .match({
+//     wxOpenId:_.in( event.data.foreignIdList)
+// })
+// 拼装查询字段
+// var foreignIdList = ["79550af2604397df08a67e053d784295","79550af260435f87089d72cd7e4db0a2"]
+// var foreignIdList = ["79550af260435f87089d72cd7e4db0a2","79550af2604397df08a67e053d784295"].reverse()
+// 拼装搜索字段
+
+// var search = event.search || {}
+// var search =   { 
+//     "isDelete":true,
+//     "fahter": ["28ee4e3e603f309f089c1609293881bc"]
+// }
+
+    // wxOpenId:_.nin([undefined,"oOY_U1KTeDL3W3PtecWdVp1QXi-A"]),
+    // wxOpenId:_.in([undefined,"oOY_U1KTeDL3W3PtecWdVp1QXi-A"]),
+    // roleList: _.in(["b00064a760439be708a91adf2606a5cc"])
+    // father: _.in(["28ee4e3e603f309f089c1609293881bc"])
